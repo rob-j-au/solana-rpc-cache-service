@@ -1,0 +1,135 @@
+name: solana-rpc-cache-service
+
+services:
+  app:
+    container_name: solana-rpc-cache-service
+    build:
+      context: .
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    depends_on:
+      postgres-migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  postgres:
+    container_name: solana-rpc-cache-service-postgres
+    image: postgres:16-alpine
+    env_file:
+      - .env
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./.docker/config/postgres:/postgres:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  postgres-migrate:
+    container_name: solana-rpc-cache-service-postgres-migrate
+    image: postgres:16-alpine
+    env_file:
+      - .env
+    volumes:
+      - ./.docker/config/postgres:/postgres:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["/postgres/migrate.sh"]
+
+  postgres-exporter:
+    container_name: solana-rpc-cache-service-postgres-exporter
+    image: prometheuscommunity/postgres-exporter:v0.19.0
+    env_file:
+      - .env
+    ports:
+      - "9187:9187"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  prometheus:
+    container_name: solana-rpc-cache-service-prometheus
+    image: prom/prometheus:v3.9.1
+    platform: ${DOCKER_PLATFORM}
+    volumes:
+      - ./.docker/config/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    restart: unless-stopped
+
+  loki:
+    container_name: solana-rpc-cache-service-loki
+    image: grafana/loki:3.6.7
+    ports:
+      - "3100:3100"
+    command: ["-config.file=/etc/loki/loki.yaml"]
+    volumes:
+      - ./.docker/config/loki/loki.yaml:/etc/loki/loki.yaml
+      - loki_data:/loki
+    restart: unless-stopped
+
+  promtail:
+    container_name: solana-rpc-cache-service-promtail
+    image: grafana/promtail:3.6.7
+    volumes:
+      - ./.docker/config/promtail/promtail.yaml:/etc/promtail/promtail.yaml
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    command: ["-config.file=/etc/promtail/promtail.yaml"]
+    depends_on:
+      - loki
+    restart: unless-stopped
+
+  grafana:
+    container_name: solana-rpc-cache-service-grafana
+    image: grafana/grafana:11.5.1
+    platform: ${DOCKER_PLATFORM}
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./.docker/config/grafana/provisioning:/etc/grafana/provisioning
+    restart: unless-stopped
+
+  pgadmin:
+    container_name: solana-rpc-cache-service-pgadmin
+    image: rorylshanks/pgadmin4-auto-login:latest
+    platform: ${DOCKER_PLATFORM}
+    ports:
+      - "5050:80"
+    env_file:
+      - .env
+    depends_on:
+      - postgres
+    restart: unless-stopped
+
+  solana-rpc-cache-service-dashboard:
+    container_name: solana-rpc-cache-service-dashboard
+    build:
+      context: .docker/config/dashboard
+    ports:
+      - "4000:4000"
+    volumes:
+      - ./.docker/config/dashboard/views:/app/views
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  prometheus_data:
+  loki_data:
+  grafana_data:
