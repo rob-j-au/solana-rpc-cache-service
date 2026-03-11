@@ -1,8 +1,6 @@
 # Solana RPC Cache Service
 
-[![Build and Push to DockerHub](https://github.com/robjau/solana-rpc-cache-service/actions/workflows/build-and-push-dockerhub.yml/badge.svg)](https://github.com/robjau/solana-rpc-cache-service/actions/workflows/build-and-push-dockerhub.yml)
-
-A high-performance Rust-based service for caching and displaying Solana blockchain transactions with comprehensive monitoring and observability.
+A demonstration Rust-based service for caching and displaying Solana blockchain transactions with comprehensive monitoring and observability.
 
 ## Features
 
